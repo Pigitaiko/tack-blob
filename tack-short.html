@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tack Short — Sub-Month IPFS Pinning for Agent Pipelines</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080b0f;
+    --surface: #0d1117;
+    --surface2: #141a22;
+    --border: #1e2a36;
+    --border2: #243040;
+    --accent: #00d4ff;
+    --accent2: #0099bb;
+    --accent-dim: rgba(0,212,255,0.08);
+    --accent-glow: rgba(0,212,255,0.15);
+    --green: #00ff94;
+    --green-dim: rgba(0,255,148,0.08);
+    --orange: #ff6b35;
+    --orange-dim: rgba(255,107,53,0.08);
+    --text: #e8f0f8;
+    --text2: #7a8fa6;
+    --text3: #4a5f72;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Glow orbs */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+  .orb-1 {
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(0,212,255,0.12), transparent 70%);
+    top: -200px; right: -100px;
+    animation: drift1 20s ease-in-out infinite;
+  }
+  .orb-2 {
+    width: 400px; height: 400px;
+    background: radial-gradient(circle, rgba(0,255,148,0.08), transparent 70%);
+    bottom: 20%; left: -100px;
+    animation: drift2 25s ease-in-out infinite;
+  }
+  @keyframes drift1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-40px,60px)} }
+  @keyframes drift2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(40px,-40px)} }
+
+  /* Nav */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 40px;
+    background: rgba(8,11,15,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 16px;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    text-decoration: none;
+  }
+
+  .nav-brand .slash { color: var(--accent); }
+  .nav-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    background: var(--accent-dim);
+    border: 1px solid rgba(0,212,255,0.2);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 32px;
+    list-style: none;
+  }
+  .nav-links a {
+    color: var(--text2);
+    text-decoration: none;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    transition: color 0.2s;
+  }
+  .nav-links a:hover { color: var(--accent); }
+
+  .nav-cta {
+    background: var(--accent);
+    color: var(--bg);
+    padding: 8px 20px;
+    border-radius: 2px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    transition: opacity 0.2s;
+  }
+  .nav-cta:hover { opacity: 0.85; }
+
+  /* Layout */
+  .container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 40px;
+    position: relative;
+    z-index: 1;
+  }
+
+  section { padding: 100px 0; }
+
+  /* Hero */
+  .hero {
+    padding: 180px 0 100px;
+    position: relative;
+  }
+
+  .hero-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 28px;
+  }
+  .hero-label::before {
+    content: '';
+    width: 24px;
+    height: 1px;
+    background: var(--accent);
+  }
+
+  .hero h1 {
+    font-family: var(--sans);
+    font-size: clamp(44px, 7vw, 80px);
+    font-weight: 800;
+    line-height: 1.0;
+    letter-spacing: -0.04em;
+    margin-bottom: 28px;
+    color: var(--text);
+  }
+
+  .hero h1 em {
+    font-style: normal;
+    color: var(--accent);
+  }
+
+  .hero h1 .line2 {
+    display: block;
+    color: var(--text2);
+  }
+
+  .hero-sub {
+    font-size: 15px;
+    color: var(--text2);
+    max-width: 520px;
+    line-height: 1.7;
+    margin-bottom: 48px;
+  }
+
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: var(--bg);
+    padding: 12px 28px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+  }
+  .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+
+  .btn-ghost {
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    padding: 12px 28px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+  }
+  .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Stats bar */
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin-top: 80px;
+    overflow: hidden;
+  }
+
+  .stat {
+    background: var(--surface);
+    padding: 28px 32px;
+    position: relative;
+  }
+  .stat::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--accent);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.4s ease;
+  }
+  .stat:hover::after { transform: scaleX(1); }
+
+  .stat-value {
+    font-family: var(--sans);
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.03em;
+    line-height: 1;
+    margin-bottom: 6px;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* Section headers */
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--text3);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section-label::before {
+    content: '';
+    width: 16px;
+    height: 1px;
+    background: var(--text3);
+  }
+
+  .section-title {
+    font-family: var(--sans);
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-bottom: 16px;
+  }
+  .section-title em {
+    font-style: normal;
+    color: var(--accent);
+  }
+
+  .section-desc {
+    color: var(--text2);
+    max-width: 480px;
+    line-height: 1.7;
+    font-size: 14px;
+  }
+
+  /* Problem section */
+  .problem-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--border);
+    margin-top: 60px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .problem-card {
+    background: var(--surface);
+    padding: 40px;
+  }
+
+  .problem-card.highlight {
+    background: var(--surface2);
+    border: 1px solid rgba(0,212,255,0.15);
+  }
+
+  .problem-tag {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 2px;
+    display: inline-block;
+    margin-bottom: 20px;
+  }
+  .tag-bad { background: rgba(255,107,53,0.1); color: var(--orange); border: 1px solid rgba(255,107,53,0.2); }
+  .tag-good { background: rgba(0,212,255,0.08); color: var(--accent); border: 1px solid rgba(0,212,255,0.2); }
+
+  .problem-card h3 {
+    font-family: var(--sans);
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+
+  .problem-card p {
+    color: var(--text2);
+    line-height: 1.7;
+    font-size: 13px;
+  }
+
+  /* Flow diagram */
+  .flow {
+    margin-top: 60px;
+    position: relative;
+  }
+
+  .flow-steps {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0;
+    position: relative;
+  }
+
+  .flow-steps::before {
+    content: '';
+    position: absolute;
+    top: 28px;
+    left: 10%;
+    right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border2), var(--accent), var(--border2), transparent);
+    z-index: 0;
+  }
+
+  .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 0 12px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .flow-dot {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--sans);
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--accent);
+    margin-bottom: 20px;
+    transition: all 0.3s;
+    position: relative;
+  }
+  .flow-dot::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1px solid rgba(0,212,255,0.1);
+  }
+  .flow-step:hover .flow-dot {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    box-shadow: 0 0 24px var(--accent-glow);
+  }
+
+  .flow-step h4 {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.01em;
+  }
+
+  .flow-step p {
+    font-size: 11px;
+    color: var(--text3);
+    line-height: 1.5;
+  }
+
+  /* Use cases */
+  .usecases {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    background: var(--border);
+    margin-top: 60px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .usecase {
+    background: var(--surface);
+    padding: 36px;
+    transition: background 0.2s;
+    cursor: default;
+  }
+  .usecase:hover { background: var(--surface2); }
+
+  .usecase-icon {
+    font-size: 28px;
+    margin-bottom: 20px;
+    display: block;
+    line-height: 1;
+  }
+
+  .usecase h3 {
+    font-family: var(--sans);
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    letter-spacing: -0.02em;
+  }
+
+  .usecase p {
+    font-size: 12px;
+    color: var(--text2);
+    line-height: 1.6;
+  }
+
+  .usecase-meta {
+    margin-top: 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text3);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .usecase-meta span {
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid rgba(0,255,148,0.15);
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
+
+  /* Code block */
+  .code-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-top: 60px;
+  }
+
+  .code-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+    overflow-x: auto;
+  }
+
+  .code-tab {
+    padding: 12px 24px;
+    font-size: 12px;
+    color: var(--text3);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    white-space: nowrap;
+    transition: all 0.2s;
+    letter-spacing: 0.04em;
+  }
+  .code-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    background: rgba(0,212,255,0.04);
+  }
+  .code-tab:hover:not(.active) { color: var(--text2); }
+
+  .code-body {
+    padding: 36px;
+    position: relative;
+  }
+
+  .code-panel { display: none; }
+  .code-panel.active { display: block; }
+
+  pre {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    overflow-x: auto;
+    color: var(--text);
+  }
+
+  .token-comment { color: var(--text3); }
+  .token-keyword { color: #c678dd; }
+  .token-string { color: #98c379; }
+  .token-function { color: #61afef; }
+  .token-number { color: #d19a66; }
+  .token-var { color: var(--text); }
+  .token-accent { color: var(--accent); }
+  .token-type { color: #e5c07b; }
+
+  /* Comparison table */
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 60px;
+    font-size: 13px;
+  }
+
+  .compare-table th {
+    text-align: left;
+    padding: 16px 24px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+  }
+
+  .compare-table th:first-child { color: var(--text3); font-weight: 400; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; }
+  .compare-table th.highlight-col { color: var(--accent); }
+
+  .compare-table td {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text2);
+    vertical-align: middle;
+  }
+
+  .compare-table td:first-child {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .compare-table tr:last-child td { border-bottom: none; }
+
+  .compare-table td.highlight-col {
+    background: rgba(0,212,255,0.03);
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .check { color: var(--green); }
+  .cross { color: var(--orange); opacity: 0.6; }
+  .partial { color: #f0c060; }
+
+  .compare-wrap {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  /* Pricing */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--border);
+    margin-top: 60px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .pricing-card {
+    background: var(--surface);
+    padding: 48px;
+  }
+  .pricing-card.featured {
+    background: var(--surface2);
+    border: 1px solid rgba(0,212,255,0.15);
+    position: relative;
+  }
+  .pricing-card.featured::before {
+    content: 'NEW';
+    position: absolute;
+    top: 20px; right: 20px;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    color: var(--accent);
+    background: var(--accent-dim);
+    border: 1px solid rgba(0,212,255,0.2);
+    padding: 3px 10px;
+    border-radius: 2px;
+  }
+
+  .pricing-card h3 {
+    font-family: var(--sans);
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .pricing-card .price {
+    font-family: var(--sans);
+    font-size: 40px;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.04em;
+    line-height: 1;
+    margin: 24px 0 8px;
+  }
+
+  .pricing-card .price-sub {
+    font-size: 12px;
+    color: var(--text3);
+    margin-bottom: 32px;
+  }
+
+  .pricing-card ul {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .pricing-card li {
+    font-size: 13px;
+    color: var(--text2);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .pricing-card li::before {
+    content: '→';
+    color: var(--accent);
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  /* Formula box */
+  .formula-box {
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    padding: 28px 36px;
+    margin-top: 48px;
+    font-size: 13px;
+  }
+
+  .formula {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent);
+    padding: 16px 0;
+    letter-spacing: 0.02em;
+  }
+
+  .formula-note {
+    font-size: 11px;
+    color: var(--text3);
+    margin-top: 12px;
+    line-height: 1.6;
+  }
+
+  /* API reference */
+  .endpoint-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    background: var(--border);
+    margin-top: 60px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .endpoint {
+    background: var(--surface);
+    padding: 20px 28px;
+    display: grid;
+    grid-template-columns: 60px 260px 1fr auto;
+    align-items: center;
+    gap: 20px;
+    transition: background 0.2s;
+  }
+  .endpoint:hover { background: var(--surface2); }
+
+  .method {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 4px 10px;
+    border-radius: 2px;
+    text-align: center;
+  }
+  .method-post { background: rgba(0,212,255,0.1); color: var(--accent); border: 1px solid rgba(0,212,255,0.2); }
+  .method-get { background: rgba(0,255,148,0.08); color: var(--green); border: 1px solid rgba(0,255,148,0.15); }
+  .method-del { background: rgba(255,107,53,0.08); color: var(--orange); border: 1px solid rgba(255,107,53,0.15); }
+
+  .endpoint-path {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+  }
+
+  .endpoint-desc {
+    font-size: 12px;
+    color: var(--text3);
+  }
+
+  .endpoint-tag {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .tag-x402 { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,212,255,0.15); }
+  .tag-auth { background: var(--green-dim); color: var(--green); border: 1px solid rgba(0,255,148,0.15); }
+  .tag-pub { background: var(--orange-dim); color: var(--orange); border: 1px solid rgba(255,107,53,0.15); }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .footer-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .footer-brand {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: -0.02em;
+  }
+  .footer-brand .slash { color: var(--accent); }
+
+  .footer-links {
+    display: flex;
+    gap: 24px;
+    list-style: none;
+  }
+  .footer-links a {
+    font-size: 11px;
+    color: var(--text3);
+    text-decoration: none;
+    letter-spacing: 0.06em;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--accent); }
+
+  .footer-note {
+    font-size: 11px;
+    color: var(--text3);
+    letter-spacing: 0.04em;
+  }
+
+  /* Chain pills */
+  .chain-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 24px;
+  }
+  .chain-pill {
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    padding: 5px 14px;
+    border-radius: 2px;
+    border: 1px solid var(--border2);
+    color: var(--text3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .chain-pill .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 0;
+  }
+
+  /* Animations */
+  .fade-up {
+    opacity: 0;
+    transform: translateY(24px);
+    animation: fadeUp 0.6s ease forwards;
+  }
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .fade-up:nth-child(1) { animation-delay: 0.1s; }
+  .fade-up:nth-child(2) { animation-delay: 0.2s; }
+  .fade-up:nth-child(3) { animation-delay: 0.3s; }
+
+  @media (max-width: 768px) {
+    nav { padding: 14px 20px; }
+    .nav-links { display: none; }
+    .container { padding: 0 20px; }
+    .stats-bar, .problem-grid, .pricing-grid { grid-template-columns: 1fr; }
+    .usecases { grid-template-columns: 1fr; }
+    .flow-steps { grid-template-columns: 1fr; }
+    .flow-steps::before { display: none; }
+    .endpoint { grid-template-columns: 60px 1fr; }
+    .endpoint-desc, .endpoint-tag { display: none; }
+    .footer-inner { flex-direction: column; gap: 20px; text-align: center; }
+  }
+</style>
+</head>
+<body>
+
+<div class="orb orb-1"></div>
+<div class="orb orb-2"></div>
+
+<!-- Nav -->
+<nav>
+  <a href="#" class="nav-brand">tack<span class="slash">/</span>short <span class="nav-badge">New</span></a>
+  <ul class="nav-links">
+    <li><a href="#problem">Problem</a></li>
+    <li><a href="#usecases">Use cases</a></li>
+    <li><a href="#integrate">Integrate</a></li>
+    <li><a href="#pricing">Pricing</a></li>
+    <li><a href="#api">API</a></li>
+  </ul>
+  <a href="#integrate" class="nav-cta">Point your agent →</a>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-label">Tack · Proposed feature</div>
+    <h1 class="fade-up">
+      Sub-month IPFS pinning<br>
+      <em>for agent pipelines.</em>
+      <span class="line2">Auto-expiring. Receipt-preserved. x402-paid.</span>
+    </h1>
+    <p class="hero-sub fade-up">
+      Agents need to pass payloads between steps. Today Tack pins last 1–24 months — overkill for a 10-minute handoff. Tack Short adds an optional <code>ttl_seconds</code> field so a pin can live anywhere from 5 minutes to 30 days, then auto-expire. The pin record is preserved as a permanent receipt; the gateway returns 410 Gone once the data is unpinned. Same x402 payment rails. No accounts. No API keys.
+    </p>
+    <div class="hero-actions fade-up">
+      <a href="#integrate" class="btn-primary">Integrate now →</a>
+      <a href="#usecases" class="btn-ghost">See use cases</a>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat">
+        <div class="stat-value">5m</div>
+        <div class="stat-label">Minimum TTL</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">30d</div>
+        <div class="stat-label">Maximum TTL</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">$0.001</div>
+        <div class="stat-label">Floor per pin operation</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">410</div>
+        <div class="stat-label">Gone after expiry</div>
+      </div>
+      <div class="stat">
+        <div class="stat-value">∞</div>
+        <div class="stat-label">Receipt retention</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Problem -->
+<section id="problem">
+  <div class="container">
+    <div class="section-label">§ 01 / Problem</div>
+    <h2 class="section-title">Tack pins last <em>1–24 months.</em><br>Your pipeline runs for minutes.</h2>
+    <p class="section-desc">Agentic workflows generate intermediate state that needs to outlive the current step but not much longer. The current minimum-month duration is the wrong granularity for inter-agent handoffs.</p>
+
+    <div class="problem-grid">
+      <div class="problem-card">
+        <span class="problem-tag tag-bad">Today · Tack pins</span>
+        <h3>Month-floor. Manual cleanup.</h3>
+        <p>Tack's existing pin lifetimes are designed for content you want to keep. An agent that pins a 2&nbsp;KB tool-call result has to either let it sit for 30+ days or remember to call <code>DELETE&nbsp;/pins/:id</code> later. That's bookkeeping the agent shouldn't be doing.</p>
+      </div>
+      <div class="problem-card highlight">
+        <span class="problem-tag tag-good">Tack Short · New</span>
+        <h3>5 min to 30 days. Auto-expiring.</h3>
+        <p>Add <code>ttl_seconds</code> to your <code>POST&nbsp;/pins</code> body. A background sweeper unpins from Kubo when the TTL elapses; the pin record is preserved as a permanent receipt. The gateway returns <code>410&nbsp;Gone</code> with the receipt afterwards. Same wallet, same x402 flow.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Flow -->
+<section>
+  <div class="container">
+    <div class="section-label">§ 02 / The loop</div>
+    <h2 class="section-title">Five steps. <em>One signature.</em></h2>
+    <p class="section-desc">The same x402 payment flow you know from Tack pins — with one extra field.</p>
+
+    <div class="flow">
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="flow-dot">1</div>
+          <h4>POST pin</h4>
+          <p>Agent sends CID to <code>/pins</code> with <code>ttl_seconds</code></p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-dot">2</div>
+          <h4>402 returned</h4>
+          <p>Tack returns the price (existing per-call formula)</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-dot">3</div>
+          <h4>Sign payment</h4>
+          <p>One on-chain USDC transfer via x402</p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-dot">4</div>
+          <h4>202 + requestid</h4>
+          <p>Pin lands on Kubo; response includes <code>expiresAt</code></p>
+        </div>
+        <div class="flow-step">
+          <div class="flow-dot">5</div>
+          <h4>Auto-expire</h4>
+          <p>Sweeper unpins at TTL; gateway returns <code>410</code> with the receipt</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Receipt callout -->
+    <div style="margin-top:32px;background:var(--surface2);border:1px solid rgba(0,212,255,0.15);border-radius:4px;padding:28px 36px;display:flex;align-items:flex-start;gap:28px;flex-wrap:wrap;">
+      <div style="flex-shrink:0;">
+        <div style="font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px;">∞ Receipt mode</div>
+        <div style="font-family:var(--sans);font-size:22px;font-weight:800;letter-spacing:-0.03em;color:var(--text);">Data expires. <span style="color:var(--accent);">Receipt persists.</span></div>
+      </div>
+      <div style="flex:1;min-width:240px;">
+        <p style="color:var(--text2);font-size:13px;line-height:1.7;margin-bottom:14px;">After expiry the row stays in Tack's index. <code style="color:var(--accent);background:var(--accent-dim);padding:1px 6px;border-radius:2px;">GET&nbsp;/pins/:requestid</code> still returns the original CID, owner, and <code style="color:var(--accent);background:var(--accent-dim);padding:1px 6px;border-radius:2px;">expiredAt</code> timestamp — a permanent record that the pin existed, paid for by the wallet on file. No extra storage. No extra payment.</p>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;">
+          <div style="font-size:12px;color:var(--text3);">→ <span style="color:var(--text2);">CID is the content commitment</span></div>
+          <div style="font-size:12px;color:var(--text3);">→ <span style="color:var(--text2);">Wallet on the row signed the pin</span></div>
+          <div style="font-size:12px;color:var(--text3);">→ <span style="color:var(--text2);">Gateway returns 410 with the receipt</span></div>
+        </div>
+      </div>
+      <div style="flex-shrink:0;background:var(--bg);border:1px solid var(--border2);border-radius:4px;padding:16px 20px;font-family:var(--mono);font-size:12px;line-height:1.8;align-self:center;">
+        <span style="color:var(--text3);">GET</span> <span style="color:var(--accent);">/ipfs/:cid</span><br>
+        <span style="color:var(--text3);">→ 410 Gone</span><br>
+        <span style="color:var(--text3);">{ receipt: { cid,</span><br>
+        <span style="color:var(--text3);">&nbsp;&nbsp;requestid,</span> <span style="color:var(--green);">expiredAt }&nbsp;}</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Use cases -->
+<section id="usecases">
+  <div class="container">
+    <div class="section-label">§ 03 / Use cases</div>
+    <h2 class="section-title">What your agents <em>actually need</em><br>to pass around.</h2>
+    <p class="section-desc">Tack Short is a fit when the data needs to be content-addressed and retrievable across a job, but doesn't justify a month of pinning.</p>
+
+    <div class="usecases">
+      <div class="usecase">
+        <span class="usecase-icon">🔁</span>
+        <h3>Inter-agent handoffs</h3>
+        <p>Agent A pins a task result with <code>ttl_seconds: 1800</code>. Agent B retrieves by CID, continues the pipeline. The data is unpinned 30 minutes later. The receipt row sticks around forever.</p>
+        <div class="usecase-meta">Typical TTL <span>5m–2h</span></div>
+      </div>
+      <div class="usecase">
+        <span class="usecase-icon">⚡</span>
+        <h3>Tool call caching</h3>
+        <p>Expensive deterministic operations — web scrapes, API calls, slow computations — get pinned with a TTL matching your cache window. Any agent in the fleet can re-fetch by CID instead of re-executing. Auto-cleanup when stale.</p>
+        <div class="usecase-meta">Typical TTL <span>1h–24h</span></div>
+      </div>
+      <div class="usecase">
+        <span class="usecase-icon">🧠</span>
+        <h3>Session state snapshots</h3>
+        <p>Checkpoint running agent memory mid-pipeline. Embeddings, context windows, intermediate reasoning — pinned for the lifetime of the session and unpinned when the session ends.</p>
+        <div class="usecase-meta">Typical TTL <span>30m–8h</span></div>
+      </div>
+      <div class="usecase">
+        <span class="usecase-icon">📄</span>
+        <h3>RAG query receipts</h3>
+        <p>Not the corpus — the retrieved chunks used to generate a specific response. Pin them so any downstream system can audit exactly what context the agent had when it made a decision, then let them expire.</p>
+        <div class="usecase-meta">Typical TTL <span>1d–7d</span></div>
+      </div>
+      <div class="usecase">
+        <span class="usecase-icon">🧾</span>
+        <h3>Verifiable task receipts</h3>
+        <p>On-chain payment, off-chain result. Pin the output, keep the wallet-signed pin record as permanent proof of delivery. The CID and the paying wallet survive after the data is unpinned.</p>
+        <div class="usecase-meta">Typical TTL <span>1d–30d</span></div>
+      </div>
+      <div class="usecase">
+        <span class="usecase-icon">🔗</span>
+        <h3>Inference input batches</h3>
+        <p>Pass prompt batches, embedding sets, or structured API responses between pipeline steps. CIDs as pointers replace in-memory passing — decoupled, retrievable, and economically settleable.</p>
+        <div class="usecase-meta">Typical TTL <span>30m–4h</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Integrate -->
+<section id="integrate">
+  <div class="container">
+    <div class="section-label">§ 04 / Integrate</div>
+    <h2 class="section-title">Same endpoint. <em>One field.</em><br>That's it.</h2>
+    <p class="section-desc">Same x402 flow as Tack pins today. Add <code>ttl_seconds</code> to the body to set expiry. USDC on Taiko Alethia.</p>
+
+    <div class="chain-row">
+      <div class="chain-pill"><span class="dot"></span> x402 · Taiko Alethia 167000</div>
+    </div>
+
+    <div class="code-section">
+      <div class="code-tabs">
+        <div class="code-tab active" onclick="switchTab(this,'ts')">TypeScript / x402</div>
+        <div class="code-tab" onclick="switchTab(this,'py')">Python</div>
+        <div class="code-tab" onclick="switchTab(this,'curl')">curl</div>
+        <div class="code-tab" onclick="switchTab(this,'verify')">Verify proof</div>
+      </div>
+      <div class="code-body">
+
+        <div class="code-panel active" id="panel-ts"><pre><span class="token-comment">// Pin a CID with 30-minute TTL · x402 on Taiko Alethia</span>
+<span class="token-keyword">import</span> { wrapFetchWithPaymentFromConfig } <span class="token-keyword">from</span> <span class="token-string">"@x402/fetch"</span>;
+<span class="token-keyword">import</span> { ExactEvmScheme, toClientEvmSigner } <span class="token-keyword">from</span> <span class="token-string">"@x402/evm"</span>;
+<span class="token-keyword">import</span> { privateKeyToAccount } <span class="token-keyword">from</span> <span class="token-string">"viem/accounts"</span>;
+<span class="token-keyword">import</span> { createPublicClient, http } <span class="token-keyword">from</span> <span class="token-string">"viem"</span>;
+<span class="token-keyword">import</span> { taiko } <span class="token-keyword">from</span> <span class="token-string">"viem/chains"</span>;
+
+<span class="token-keyword">const</span> account = <span class="token-function">privateKeyToAccount</span>(<span class="token-string">"0x..."</span>);
+<span class="token-keyword">const</span> signer  = <span class="token-function">toClientEvmSigner</span>(account, <span class="token-function">createPublicClient</span>({
+  chain: taiko, transport: <span class="token-function">http</span>()
+}));
+
+<span class="token-keyword">const</span> pay = <span class="token-function">wrapFetchWithPaymentFromConfig</span>(fetch, {
+  schemes: [{ network: <span class="token-string">"eip155:167000"</span>, client: <span class="token-keyword">new</span> <span class="token-function">ExactEvmScheme</span>(signer) }]
+});
+
+<span class="token-comment">// You already have a CID from /upload or your own ipfs add</span>
+<span class="token-keyword">const</span> cid = <span class="token-string">"bafybeigdyrzt..."</span>;
+
+<span class="token-comment">// POST to /pins with ttl_seconds — 402 → sign → 202</span>
+<span class="token-keyword">const</span> res = <span class="token-keyword">await</span> <span class="token-function">pay</span>(<span class="token-string">"https://tack-api-production.up.railway.app/pins"</span>, {
+  method: <span class="token-string">"POST"</span>,
+  headers: { <span class="token-string">"Content-Type"</span>: <span class="token-string">"application/json"</span> },
+  body: <span class="token-type">JSON</span>.<span class="token-function">stringify</span>({
+    cid,
+    name: <span class="token-string">"handoff:retriever→ranker"</span>,
+    ttl_seconds: <span class="token-number">1800</span>          <span class="token-comment">// 300 to 2592000 (30 days)</span>
+  })
+});
+
+<span class="token-keyword">const</span> { requestid, pin, expiresAt } = <span class="token-keyword">await</span> res.<span class="token-function">json</span>();
+
+<span class="token-comment">// requestid  → pass downstream or look up later</span>
+<span class="token-comment">// pin.cid    → still the original CID</span>
+<span class="token-comment">// expiresAt  → unix seconds when sweeper unpins</span>
+</pre></div>
+
+        <div class="code-panel" id="panel-py"><pre><span class="token-comment"># pip install x402-python</span>
+<span class="token-keyword">from</span> x402 <span class="token-keyword">import</span> X402Client
+<span class="token-keyword">import</span> json
+
+client = <span class="token-function">X402Client</span>(
+    private_key=<span class="token-string">"0x..."</span>,
+    chain=<span class="token-string">"taiko"</span>
+)
+
+body = json.<span class="token-function">dumps</span>({
+    <span class="token-string">"cid"</span>: <span class="token-string">"bafybeigdyrzt..."</span>,
+    <span class="token-string">"name"</span>: <span class="token-string">"rag-retriever-output"</span>,
+    <span class="token-string">"ttl_seconds"</span>: <span class="token-number">3600</span>
+})
+
+<span class="token-comment"># Pin with TTL, x402 payment handled automatically</span>
+res = client.<span class="token-function">post</span>(
+    <span class="token-string">"https://tack-api-production.up.railway.app/pins"</span>,
+    data=body,
+    headers={ <span class="token-string">"Content-Type"</span>: <span class="token-string">"application/json"</span> }
+)
+
+pin = res.<span class="token-function">json</span>()
+
+<span class="token-comment"># Pass requestid to next agent in pipeline</span>
+<span class="token-function">print</span>(pin[<span class="token-string">"requestid"</span>])  <span class="token-comment"># → UUID, owner-scoped</span>
+<span class="token-function">print</span>(pin[<span class="token-string">"pin"</span>][<span class="token-string">"cid"</span>])  <span class="token-comment"># → original CID</span>
+<span class="token-function">print</span>(pin[<span class="token-string">"expiresAt"</span>])   <span class="token-comment"># → unix seconds</span>
+</pre></div>
+
+        <div class="code-panel" id="panel-curl"><pre><span class="token-comment"># Step 1: POST pin with ttl_seconds, get 402 with price</span>
+curl -X POST https://tack-api-production.up.railway.app/pins \
+  -H <span class="token-string">"Content-Type: application/json"</span> \
+  -d <span class="token-string">'{"cid":"bafybeigdyrzt...","ttl_seconds":1800}'</span>
+
+<span class="token-comment"># Returns 402 with payment requirements per x402 spec</span>
+
+<span class="token-comment"># Step 2: Sign payment, retry with signature</span>
+curl -X POST https://tack-api-production.up.railway.app/pins \
+  -H <span class="token-string">"Content-Type: application/json"</span> \
+  -H <span class="token-string">"payment-signature: &lt;x402-signature&gt;"</span> \
+  -d <span class="token-string">'{"cid":"bafybeigdyrzt...","ttl_seconds":1800}'</span>
+
+<span class="token-comment"># Returns 202:</span>
+<span class="token-comment"># {</span>
+<span class="token-comment">#   "requestid": "9c1e...UUID",</span>
+<span class="token-comment">#   "status": "pinned",</span>
+<span class="token-comment">#   "pin": { "cid": "bafy...", "name": null },</span>
+<span class="token-comment">#   "expiresAt": 1746401800</span>
+<span class="token-comment"># }</span>
+</pre></div>
+
+        <div class="code-panel" id="panel-verify"><pre><span class="token-comment">// Retrieve content; handle expiry receipt</span>
+<span class="token-comment">// The pin record (CID + paying wallet) is permanent — readable</span>
+<span class="token-comment">// even after the data is unpinned.</span>
+
+<span class="token-keyword">const</span> cid = <span class="token-string">"bafybeigdyrzt..."</span>;
+
+<span class="token-comment">// Public gateway, no auth needed for retrieval</span>
+<span class="token-keyword">const</span> res = <span class="token-keyword">await</span> <span class="token-function">fetch</span>(
+  <span class="token-string">`https://tack-api-production.up.railway.app/ipfs/<span class="token-accent">${cid}</span>`</span>
+);
+
+<span class="token-keyword">if</span> (res.status === <span class="token-number">410</span>) {
+  <span class="token-comment">// Pin expired — body carries the receipt</span>
+  <span class="token-keyword">const</span> { receipt } = <span class="token-keyword">await</span> res.<span class="token-function">json</span>();
+  <span class="token-comment">// receipt.cid       → original content address</span>
+  <span class="token-comment">// receipt.requestid → owner-scoped UUID</span>
+  <span class="token-comment">// receipt.expiredAt → unix seconds when sweeper unpinned</span>
+} <span class="token-keyword">else</span> <span class="token-keyword">if</span> (res.ok) {
+  <span class="token-keyword">const</span> bytes = <span class="token-keyword">await</span> res.<span class="token-function">arrayBuffer</span>();
+  <span class="token-comment">// Use the bytes; ETag and Range are supported.</span>
+}
+
+<span class="token-comment">// Owner endpoint: GET /pins/:requestid still returns the row</span>
+<span class="token-comment">// after expiry, so the receipt is auditable from your records too.</span>
+</pre></div>
+
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Compare -->
+<section>
+  <div class="container">
+    <div class="section-label">§ 05 / Compare</div>
+    <h2 class="section-title">Right tool for <em>right shelf life.</em></h2>
+    <p class="section-desc">Tack Short and Tack Pins serve different needs. Use both in the same pipeline.</p>
+
+    <div class="compare-wrap">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Tack Pins (today)</th>
+            <th class="highlight-col">Tack Short · New</th>
+            <th>Pinata / web3.storage</th>
+            <th>Self-hosted Kubo</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Storage type</td>
+            <td>IPFS pin</td>
+            <td class="highlight-col">IPFS pin + TTL</td>
+            <td>IPFS pin</td>
+            <td>IPFS pin</td>
+          </tr>
+          <tr>
+            <td>Duration control</td>
+            <td>1–24 months</td>
+            <td class="highlight-col">5 min – 30 days</td>
+            <td>Plan-based</td>
+            <td>Manual</td>
+          </tr>
+          <tr>
+            <td>Auto-cleanup</td>
+            <td><span class="cross">✗</span> Manual DELETE</td>
+            <td class="highlight-col"><span class="check">✓</span> Sweeper</td>
+            <td><span class="cross">✗</span></td>
+            <td><span class="cross">✗</span></td>
+          </tr>
+          <tr>
+            <td>Receipt after expiry</td>
+            <td><span class="partial">~</span> Pin row exists</td>
+            <td class="highlight-col"><span class="check">✓</span> 410 with receipt</td>
+            <td><span class="cross">✗</span></td>
+            <td><span class="cross">✗</span></td>
+          </tr>
+          <tr>
+            <td>Auth model</td>
+            <td>x402 wallet</td>
+            <td class="highlight-col">x402 wallet</td>
+            <td>API key</td>
+            <td>None / your own</td>
+          </tr>
+          <tr>
+            <td>Floor price per call</td>
+            <td>$0.001</td>
+            <td class="highlight-col">$0.001</td>
+            <td>Plan minimum</td>
+            <td>Infra cost</td>
+          </tr>
+          <tr>
+            <td>Agent-native</td>
+            <td><span class="check">✓</span> A2A card</td>
+            <td class="highlight-col"><span class="check">✓</span> A2A card</td>
+            <td><span class="cross">✗</span></td>
+            <td><span class="cross">✗</span></td>
+          </tr>
+          <tr>
+            <td>Best for</td>
+            <td>Long-lived artifacts, RAG corpora</td>
+            <td class="highlight-col">Handoffs, caches, session state</td>
+            <td>Human-managed storage</td>
+            <td>Full control, ops overhead</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- Pricing -->
+<section id="pricing">
+  <div class="container">
+    <div class="section-label">§ 06 / Pricing</div>
+    <h2 class="section-title">Same per-call pricing. <em>Just shorter.</em></h2>
+    <p class="section-desc">Tack Short uses the existing Tack pricing formula unchanged — TTL is an auto-cleanup primitive, not a new tier. Sub-month pricing changes can land separately once usage data shows whether agents price-shop on duration.</p>
+
+    <div class="pricing-grid">
+      <div class="pricing-card">
+        <h3>Tack Pins</h3>
+        <p style="color:var(--text2);font-size:13px;">IPFS pin · long-lived content for agents</p>
+        <div class="price">$0.001</div>
+        <div class="price-sub">base + $0.001 / MB · per pin operation</div>
+        <ul>
+          <li>1–24 month duration</li>
+          <li>Free retrieval, always</li>
+          <li>IPFS Pinning Service API spec</li>
+          <li>x402 payment rail</li>
+          <li>A2A agent card at /.well-known</li>
+          <li>Taiko Alethia · USDC</li>
+        </ul>
+      </div>
+      <div class="pricing-card featured">
+        <h3>Tack Short</h3>
+        <p style="color:var(--text2);font-size:13px;">IPFS pin + TTL · auto-expiring</p>
+        <div class="price">$0.001</div>
+        <div class="price-sub">base + $0.001 / MB · per pin operation</div>
+        <ul>
+          <li>5 min to 30 day TTL via <code>ttl_seconds</code></li>
+          <li>Sweeper unpins from Kubo at expiry</li>
+          <li>Pin record preserved as receipt</li>
+          <li>410 Gone with receipt after expiry</li>
+          <li>Same x402 wallet-as-identity flow</li>
+          <li>Same A2A agent card, TTL bounds advertised</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="formula-box">
+      <div style="font-size:11px;color:var(--text3);letter-spacing:0.1em;text-transform:uppercase;margin-bottom:8px;">Pricing formula (unchanged)</div>
+      <div class="formula">price = base + max(0, ceil((sizeBytes − 1MB) / 1MB)) × perMB,&nbsp;capped at maxPriceUsd</div>
+      <div class="formula-note">
+        Defaults: <code>base = $0.001</code>, <code>perMB = $0.001</code>, <code>max = $0.01</code>. Pins at or below 1&nbsp;MB hit the floor regardless of TTL — which is exactly the agent-handoff sweet spot. Long pins and short pins cost the same; what TTL buys you is auto-cleanup and a permanent receipt.
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- API -->
+<section id="api">
+  <div class="container">
+    <div class="section-label">§ 07 / API</div>
+    <h2 class="section-title">Same endpoints. <em>One new field.</em></h2>
+    <p class="section-desc">Tack Short does not add new routes. It extends <code>POST&nbsp;/pins</code> with an optional <code>ttl_seconds</code> body field, returns <code>expiresAt</code>/<code>expiredAt</code> on the pin status response, and changes <code>GET&nbsp;/ipfs/:cid</code> to return <code>410</code> with a receipt body once the only active pin for that CID has expired.</p>
+
+    <div class="endpoint-list">
+      <div class="endpoint">
+        <span class="method method-post">POST</span>
+        <span class="endpoint-path">/pins</span>
+        <span class="endpoint-desc">Create pin. Optional <code>ttl_seconds</code> in body. Returns 402 → sign → 202 with <code>requestid</code> + <code>expiresAt</code></span>
+        <span class="endpoint-tag tag-x402">x402</span>
+      </div>
+      <div class="endpoint">
+        <span class="method method-post">POST</span>
+        <span class="endpoint-path">/pins/:requestid</span>
+        <span class="endpoint-desc">Replace pin. Same <code>ttl_seconds</code> field. Owner-only</span>
+        <span class="endpoint-tag tag-auth">bearer</span>
+      </div>
+      <div class="endpoint">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/ipfs/:cid</span>
+        <span class="endpoint-desc">Public retrieval. Returns 410 with <code>{ receipt: { cid, requestid, expiredAt } }</code> once the only active pin for that CID has expired</span>
+        <span class="endpoint-tag tag-pub">public</span>
+      </div>
+      <div class="endpoint">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/pins/:requestid</span>
+        <span class="endpoint-desc">Get pin status, including <code>expiresAt</code>/<code>expiredAt</code>. Receipt is preserved after expiry</span>
+        <span class="endpoint-tag tag-auth">bearer</span>
+      </div>
+      <div class="endpoint">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/pins</span>
+        <span class="endpoint-desc">List your wallet's pins, including expired rows</span>
+        <span class="endpoint-tag tag-auth">bearer</span>
+      </div>
+      <div class="endpoint">
+        <span class="method method-del">DEL</span>
+        <span class="endpoint-path">/pins/:requestid</span>
+        <span class="endpoint-desc">Early-remove a pin you own. Sweeper still owns the auto-expiry path</span>
+        <span class="endpoint-tag tag-auth">bearer</span>
+      </div>
+      <div class="endpoint">
+        <span class="method method-get">GET</span>
+        <span class="endpoint-path">/.well-known/agent.json</span>
+        <span class="endpoint-desc">A2A agent card — advertises <code>capabilities.pinningApi.ttl</code> bounds and the 410 contract on the gateway</span>
+        <span class="endpoint-tag tag-pub">public</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- CTA -->
+<section style="padding:80px 0;">
+  <div class="container" style="text-align:center;">
+    <div class="section-label" style="justify-content:center;">Ready</div>
+    <h2 class="section-title" style="margin:0 auto 20px;">Give your pipeline a place<br>to <em>pass things around.</em></h2>
+    <p class="section-desc" style="margin:0 auto 48px;text-align:center;">Same endpoint. One new field. Auto-cleanup at the TTL.</p>
+    <div class="hero-actions" style="justify-content:center;">
+      <a href="https://github.com/Pigitaiko/tack-blob/tree/feat/pin-ttl" class="btn-primary" target="_blank">View the PR diff →</a>
+      <a href="https://github.com/kimo-ice/tack" class="btn-ghost" target="_blank">Upstream Tack</a>
+    </div>
+    <div class="chain-row" style="justify-content:center;margin-top:32px;">
+      <div class="chain-pill"><span class="dot"></span> Taiko Alethia 167000 · USDC</div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-inner">
+      <div class="footer-brand">tack<span class="slash">/</span>short</div>
+      <ul class="footer-links">
+        <li><a href="https://tack-api-production.up.railway.app/health">status</a></li>
+        <li><a href="https://tack-api-production.up.railway.app/.well-known/agent.json">agent card</a></li>
+        <li><a href="https://www.x402.org/">x402</a></li>
+        <li><a href="https://github.com/kimo-ice/tack">tack repo</a></li>
+        <li><a href="https://github.com/Pigitaiko/tack-blob/tree/feat/pin-ttl">this PR</a></li>
+      </ul>
+      <div class="footer-note">sub-month. auto-expiring. receipt-preserved.</div>
+    </div>
+  </div>
+</footer>
+
+<script>
+function switchTab(el, id) {
+  document.querySelectorAll('.code-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.code-panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-' + id).classList.add('active');
+}
+</script>
+
+</body>
+</html>
