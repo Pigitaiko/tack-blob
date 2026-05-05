@@ -2,7 +2,9 @@
 
 This branch is a feature proposal for [`kimo-ice/tack`](https://github.com/kimo-ice/tack): an optional `ttl_seconds` field on `POST /pins` so an agent can pin content for **5 minutes to 30 days** instead of the current 1–24 month minimum, with auto-cleanup and a permanent receipt.
 
-> See [`tack-short.html`](./tack-short.html) for the design overview as a one-page site. Open the file directly in a browser, or — once GitHub Pages is enabled on this repo — visit it at the published URL.
+> **Live design overview:** **<https://pigitaiko.github.io/tack-blob/>**
+>
+> Source: [`index.html`](./index.html). To enable the live site (one-time, owner-only), open **Settings → Pages** on this repo, set _Source_ to **Deploy from a branch**, pick branch **`feat/pin-ttl`** + folder **`/ (root)`**, and click **Save**. The first build takes ~30s.
 
 ## What this PR adds
 
