@@ -5,6 +5,20 @@ export class NotFoundError extends Error {
   }
 }
 
+export class GoneError extends Error {
+  constructor(
+    message: string,
+    public readonly receipt: {
+      cid: string;
+      requestid: string;
+      expiredAt: number;
+    }
+  ) {
+    super(message);
+    this.name = 'GoneError';
+  }
+}
+
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);

@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3';
 import type { PinStatusValue, StoredPinRecord } from '../types';
 
+const PIN_COLUMNS = `requestid, cid, name, status, origins, meta, delegates, info, owner, created, updated, expires_at, expired_at`;
+
 interface DbPinRow {
   requestid: string;
   cid: string;
@@ -13,6 +15,8 @@ interface DbPinRow {
   owner: string;
   created: string;
   updated: string;
+  expires_at: number | null;
+  expired_at: number | null;
 }
 
 export interface PinListFilters {
@@ -37,9 +41,9 @@ export class PinRepository {
   create(record: StoredPinRecord): void {
     const statement = this.db.prepare(`
       INSERT INTO pins (
-        requestid, cid, name, status, origins, meta, delegates, info, owner, created, updated
+        requestid, cid, name, status, origins, meta, delegates, info, owner, created, updated, expires_at, expired_at
       ) VALUES (
-        @requestid, @cid, @name, @status, @origins, @meta, @delegates, @info, @owner, @created, @updated
+        @requestid, @cid, @name, @status, @origins, @meta, @delegates, @info, @owner, @created, @updated, @expires_at, @expired_at
       )
     `);
 
@@ -48,7 +52,9 @@ export class PinRepository {
       origins: JSON.stringify(record.origins),
       meta: JSON.stringify(record.meta),
       delegates: JSON.stringify(record.delegates),
-      info: JSON.stringify(record.info)
+      info: JSON.stringify(record.info),
+      expires_at: record.expiresAt,
+      expired_at: record.expiredAt
     });
   }
 
@@ -75,7 +81,9 @@ export class PinRepository {
           info = @info,
           owner = @owner,
           created = @created,
-          updated = @updated
+          updated = @updated,
+          expires_at = @expires_at,
+          expired_at = @expired_at
       WHERE requestid = @requestid
     `);
 
@@ -84,7 +92,9 @@ export class PinRepository {
       origins: JSON.stringify(nextRecord.origins),
       meta: JSON.stringify(nextRecord.meta),
       delegates: JSON.stringify(nextRecord.delegates),
-      info: JSON.stringify(nextRecord.info)
+      info: JSON.stringify(nextRecord.info),
+      expires_at: nextRecord.expiresAt,
+      expired_at: nextRecord.expiredAt
     });
   }
 
@@ -95,7 +105,7 @@ export class PinRepository {
 
   findByRequestId(requestid: string): StoredPinRecord | null {
     const row = this.db
-      .prepare('SELECT requestid, cid, name, status, origins, meta, delegates, info, owner, created, updated FROM pins WHERE requestid = ?')
+      .prepare(`SELECT ${PIN_COLUMNS} FROM pins WHERE requestid = ?`)
       .get(requestid) as DbPinRow | undefined;
 
     return row ? this.mapRow(row) : null;
@@ -105,9 +115,9 @@ export class PinRepository {
     const pinnedRow = this.db
       .prepare(
         `
-          SELECT requestid, cid, name, status, origins, meta, delegates, info, owner, created, updated
+          SELECT ${PIN_COLUMNS}
           FROM pins
-          WHERE cid = ? AND status = 'pinned'
+          WHERE cid = ? AND status = 'pinned' AND expired_at IS NULL
           ORDER BY updated DESC
           LIMIT 1
         `
@@ -121,7 +131,7 @@ export class PinRepository {
     const fallbackRow = this.db
       .prepare(
         `
-          SELECT requestid, cid, name, status, origins, meta, delegates, info, owner, created, updated
+          SELECT ${PIN_COLUMNS}
           FROM pins
           WHERE cid = ?
           ORDER BY updated DESC
@@ -131,6 +141,43 @@ export class PinRepository {
       .get(cid) as DbPinRow | undefined;
 
     return fallbackRow ? this.mapRow(fallbackRow) : null;
+  }
+
+  hasOtherActivePinForCid(cid: string, excludeRequestId: string): boolean {
+    const row = this.db
+      .prepare(
+        `
+          SELECT 1 as present
+          FROM pins
+          WHERE cid = ?
+            AND requestid != ?
+            AND status = 'pinned'
+            AND expired_at IS NULL
+          LIMIT 1
+        `
+      )
+      .get(cid, excludeRequestId) as { present: number } | undefined;
+
+    return !!row;
+  }
+
+  findExpiringBefore(nowSeconds: number, limit: number): StoredPinRecord[] {
+    const rows = this.db
+      .prepare(
+        `
+          SELECT ${PIN_COLUMNS}
+          FROM pins
+          WHERE expires_at IS NOT NULL
+            AND expired_at IS NULL
+            AND expires_at <= ?
+            AND status = 'pinned'
+          ORDER BY expires_at ASC
+          LIMIT ?
+        `
+      )
+      .all(nowSeconds, limit) as DbPinRow[];
+
+    return rows.map((row) => this.mapRow(row));
   }
 
   list(filters: PinListFilters): PinListResult {
@@ -174,7 +221,7 @@ export class PinRepository {
     const total = this.db.prepare(countQuery).get(...params) as { count: number };
 
     const listQuery = `
-      SELECT requestid, cid, name, status, origins, meta, delegates, info, owner, created, updated
+      SELECT ${PIN_COLUMNS}
       FROM pins
       ${whereClause}
       ORDER BY created DESC
@@ -203,7 +250,9 @@ export class PinRepository {
       info: JSON.parse(row.info) as Record<string, unknown>,
       owner: row.owner,
       created: row.created,
-      updated: row.updated
+      updated: row.updated,
+      expiresAt: row.expires_at,
+      expiredAt: row.expired_at
     };
   }
 }

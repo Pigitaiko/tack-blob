@@ -50,6 +50,21 @@ Implements the [IPFS Pinning Service API](https://ipfs.github.io/pinning-service
 
 **Auth model**: Paid endpoints use `payment-signature` (x402). Owner endpoints (list, get, replace, delete) use `Authorization: Bearer <token>`. The wallet that pays owns the pin.
 
+### Optional pin TTL
+
+Add `ttl_seconds` to a `POST /pins` (or `POST /pins/:requestid`) body to auto-expire the pin. Default bounds are 5 minutes to 30 days; configurable via `PIN_TTL_MIN_SECONDS` and `PIN_TTL_MAX_SECONDS`.
+
+```bash
+curl -X POST .../pins \
+  -H 'content-type: application/json' \
+  -H 'payment-signature: <x402>' \
+  -d '{"cid":"bafy...","name":"handoff","ttl_seconds":1800}'
+```
+
+The response includes `expiresAt` (unix seconds). Once a pin's TTL elapses, a background sweeper unpins it from Kubo and stamps `expiredAt` on the row. The pin record is preserved as a permanent receipt — `GET /pins/:requestid` keeps returning it. `GET /ipfs/:cid` returns `410 Gone` once the only active pin for that CID has expired, with `{ receipt: { cid, requestid, expiredAt } }` in the body.
+
+If multiple pin records reference the same CID, the data remains pinned in Kubo until *all* of them expire or are removed; this matches Kubo's pin-counter semantics.
+
 ## For AI Agents
 
 Tack exposes an [A2A](https://google.github.io/A2A/) agent card at `/.well-known/agent.json`. An agent with a wallet can discover Tack, pin content, and pay — no human in the loop.

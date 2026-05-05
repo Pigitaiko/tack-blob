@@ -19,6 +19,8 @@ export interface StoredPinRecord {
   owner: string;
   created: string;
   updated: string;
+  expiresAt: number | null;
+  expiredAt: number | null;
 }
 
 export interface PinStatusResponse {
@@ -28,6 +30,8 @@ export interface PinStatusResponse {
   pin: Pin;
   delegates: string[];
   info: Record<string, unknown>;
+  expiresAt?: number;
+  expiredAt?: number;
 }
 
 export interface PinResultsResponse {

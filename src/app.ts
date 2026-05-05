@@ -3,6 +3,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import {
   GatewayTimeoutError,
+  GoneError,
   NotFoundError,
   PayloadTooLargeError,
   RateLimitError,
@@ -80,6 +81,7 @@ function parsePinPayload(payload: unknown): {
   name?: string;
   origins?: string[];
   meta?: Record<string, string>;
+  ttlSeconds?: number;
 } {
   if (!payload || typeof payload !== 'object') {
     throw new ValidationError('Payload must be an object');
@@ -103,11 +105,20 @@ function parsePinPayload(payload: unknown): {
     throw new ValidationError('meta must be an object with string values');
   }
 
+  let ttlSeconds: number | undefined;
+  if (body.ttl_seconds !== undefined) {
+    if (typeof body.ttl_seconds !== 'number' || !Number.isInteger(body.ttl_seconds) || body.ttl_seconds <= 0) {
+      throw new ValidationError('ttl_seconds must be a positive integer');
+    }
+    ttlSeconds = body.ttl_seconds;
+  }
+
   return {
     cid: body.cid,
     name: body.name === undefined ? undefined : body.name,
     origins: body.origins === undefined ? undefined : body.origins,
-    meta: body.meta === undefined ? undefined : body.meta
+    meta: body.meta === undefined ? undefined : body.meta,
+    ttlSeconds
   };
 }
 
@@ -277,6 +288,10 @@ function statusFromError(error: unknown): number {
     return 502;
   }
 
+  if (error instanceof GoneError) {
+    return 410;
+  }
+
   if (error instanceof NotFoundError) {
     return 404;
   }
@@ -411,6 +426,7 @@ export function createApp(services: AppServices): Hono<AppEnv> {
     const baseUrl = new URL(c.req.url);
     const origin = `${baseUrl.protocol}//${baseUrl.host}`;
     const agent = services.agentCard;
+    const ttlBounds = services.pinningService.getTtlBounds();
 
     return c.json({
       protocol: 'a2a',
@@ -421,11 +437,17 @@ export function createApp(services: AppServices): Hono<AppEnv> {
       capabilities: {
         pinningApi: {
           spec: 'IPFS Pinning Service API',
-          endpoints: ['/pins', '/pins/:requestid', '/upload']
+          endpoints: ['/pins', '/pins/:requestid', '/upload'],
+          ttl: {
+            field: 'ttl_seconds',
+            minSeconds: ttlBounds.minSeconds,
+            maxSeconds: ttlBounds.maxSeconds,
+            expiredStatus: 410
+          }
         },
         gateway: {
           endpoint: '/ipfs/:cid',
-          supports: ['etag', 'range', 'cache-control', 'optional-paywall']
+          supports: ['etag', 'range', 'cache-control', 'optional-paywall', 'expired-410']
         }
       },
       pricing: {
@@ -451,7 +473,14 @@ export function createApp(services: AppServices): Hono<AppEnv> {
   app.post('/pins', async (c) => {
     const body = parsePinPayload(await parseJsonBody(c));
     const paidWallet = requireWallet(c, 'paidWalletAddress');
-    const result = await services.pinningService.createPin({ ...body, owner: paidWallet });
+    const result = await services.pinningService.createPin({
+      cid: body.cid,
+      name: body.name,
+      origins: body.origins,
+      meta: body.meta,
+      ttlSeconds: body.ttlSeconds,
+      owner: paidWallet
+    });
     return c.json(toPinStatusResponse(result), 202);
   });
 
@@ -491,7 +520,17 @@ export function createApp(services: AppServices): Hono<AppEnv> {
   app.post('/pins/:requestid', async (c) => {
     const body = parsePinPayload(await parseJsonBody(c));
     const wallet = requireOwnerWallet(c);
-    const record = await services.pinningService.replacePin(c.req.param('requestid'), body, wallet);
+    const record = await services.pinningService.replacePin(
+      c.req.param('requestid'),
+      {
+        cid: body.cid,
+        name: body.name,
+        origins: body.origins,
+        meta: body.meta,
+        ttlSeconds: body.ttlSeconds
+      },
+      wallet
+    );
     return c.json(toPinStatusResponse(record), 202);
   });
 
@@ -578,6 +617,16 @@ export function createApp(services: AppServices): Hono<AppEnv> {
 
     if (err instanceof UpstreamServiceError) {
       return c.json({ error: 'IPFS upstream request failed' }, 502);
+    }
+
+    if (err instanceof GoneError) {
+      return c.json(
+        {
+          error: err.message,
+          receipt: err.receipt
+        },
+        410
+      );
     }
 
     if (err instanceof NotFoundError) {

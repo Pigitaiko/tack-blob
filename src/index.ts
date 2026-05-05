@@ -11,6 +11,7 @@ import { createX402PaymentMiddleware } from './services/x402';
 import { GatewayContentCache } from './services/content-cache';
 import { InMemoryRateLimiter } from './services/rate-limiter';
 import { logger } from './services/logger';
+import { TtlSweeper } from './services/ttl-sweeper';
 
 function getAppVersion(): string {
   try {
@@ -45,7 +46,15 @@ const rateLimiter = new InMemoryRateLimiter(config.rateLimitRequestsPerMinute, 6
 const pinningService = new PinningService(repository, ipfsClient, config.delegateUrl, {
   contentCache,
   maxGatewayContentSizeBytes: config.gatewayMaxContentSizeBytes,
-  replicas: replicaClients
+  replicas: replicaClients,
+  ttlBounds: {
+    minSeconds: config.ttlMinSeconds,
+    maxSeconds: config.ttlMaxSeconds
+  }
+});
+const ttlSweeper = new TtlSweeper(pinningService, {
+  intervalMs: config.ttlSweepIntervalMs,
+  batchSize: config.ttlSweepBatchSize
 });
 const paymentMiddleware = config.x402Enabled
   ? createX402PaymentMiddleware({
@@ -108,6 +117,16 @@ const server = serve(
   }
 );
 
+ttlSweeper.start();
+logger.info(
+  {
+    intervalMs: config.ttlSweepIntervalMs,
+    minSeconds: config.ttlMinSeconds,
+    maxSeconds: config.ttlMaxSeconds
+  },
+  'ttl sweeper started'
+);
+
 let shuttingDown = false;
 
 const shutdown = (signal: NodeJS.Signals): void => {
@@ -124,21 +143,23 @@ const shutdown = (signal: NodeJS.Signals): void => {
   }, 10000);
   forceExitTimer.unref();
 
-  server.close((serverError) => {
-    if (serverError) {
-      logger.error({ err: serverError }, 'failed to close HTTP server cleanly');
-      process.exitCode = 1;
-    }
+  void ttlSweeper.stop().finally(() => {
+    server.close((serverError) => {
+      if (serverError) {
+        logger.error({ err: serverError }, 'failed to close HTTP server cleanly');
+        process.exitCode = 1;
+      }
 
-    try {
-      db.close();
-    } catch (dbError) {
-      logger.error({ err: dbError }, 'failed to close sqlite database cleanly');
-      process.exitCode = 1;
-    } finally {
-      clearTimeout(forceExitTimer);
-      process.exit(process.exitCode ?? 0);
-    }
+      try {
+        db.close();
+      } catch (dbError) {
+        logger.error({ err: dbError }, 'failed to close sqlite database cleanly');
+        process.exitCode = 1;
+      } finally {
+        clearTimeout(forceExitTimer);
+        process.exit(process.exitCode ?? 0);
+      }
+    });
   });
 };
 

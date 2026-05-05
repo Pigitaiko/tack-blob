@@ -24,6 +24,10 @@ export interface AppConfig {
   x402BasePriceUsd: number;
   x402PricePerMbUsd: number;
   x402MaxPriceUsd: number;
+  ttlMinSeconds: number;
+  ttlMaxSeconds: number;
+  ttlSweepIntervalMs: number;
+  ttlSweepBatchSize: number;
 }
 
 const PLACEHOLDER_EVM_ADDRESSES = new Set([
@@ -128,7 +132,11 @@ export function getConfig(): AppConfig {
     x402UsdcDomainVersion: process.env.X402_USDC_DOMAIN_VERSION ?? '2',
     x402BasePriceUsd: parseNumber(process.env.X402_BASE_PRICE_USD, 0.001, 'X402_BASE_PRICE_USD'),
     x402PricePerMbUsd: parseNumber(process.env.X402_PRICE_PER_MB_USD, 0.001, 'X402_PRICE_PER_MB_USD'),
-    x402MaxPriceUsd: parseNumber(process.env.X402_MAX_PRICE_USD, 0.01, 'X402_MAX_PRICE_USD')
+    x402MaxPriceUsd: parseNumber(process.env.X402_MAX_PRICE_USD, 0.01, 'X402_MAX_PRICE_USD'),
+    ttlMinSeconds: parseNumber(process.env.PIN_TTL_MIN_SECONDS, 300, 'PIN_TTL_MIN_SECONDS'),
+    ttlMaxSeconds: parseNumber(process.env.PIN_TTL_MAX_SECONDS, 30 * 24 * 60 * 60, 'PIN_TTL_MAX_SECONDS'),
+    ttlSweepIntervalMs: parseNumber(process.env.PIN_TTL_SWEEP_INTERVAL_MS, 60_000, 'PIN_TTL_SWEEP_INTERVAL_MS'),
+    ttlSweepBatchSize: parseNumber(process.env.PIN_TTL_SWEEP_BATCH_SIZE, 100, 'PIN_TTL_SWEEP_BATCH_SIZE')
   };
 
   validateProductionConfig(config);

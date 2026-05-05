@@ -117,6 +117,76 @@ describe('PinningService', () => {
     });
   });
 
+  it('stores expiresAt when ttlSeconds is provided', async () => {
+    const before = Math.floor(Date.now() / 1000);
+    const result = await service.createPin({ cid: 'bafy-ttl', owner: wallet, ttlSeconds: 600 });
+    const after = Math.floor(Date.now() / 1000);
+
+    expect(result.expiresAt).not.toBeNull();
+    expect(result.expiresAt!).toBeGreaterThanOrEqual(before + 600);
+    expect(result.expiresAt!).toBeLessThanOrEqual(after + 600);
+    expect(result.expiredAt).toBeNull();
+  });
+
+  it('rejects ttlSeconds outside configured bounds', async () => {
+    service = new PinningService(repository, ipfsClient, 'http://localhost:8080/ipfs', {
+      ttlBounds: { minSeconds: 300, maxSeconds: 86400 }
+    });
+
+    await expect(service.createPin({ cid: 'bafy-ttl-low', owner: wallet, ttlSeconds: 60 })).rejects.toThrow(
+      /ttl_seconds/
+    );
+    await expect(
+      service.createPin({ cid: 'bafy-ttl-high', owner: wallet, ttlSeconds: 86400 + 1 })
+    ).rejects.toThrow(/ttl_seconds/);
+  });
+
+  it('expirePin unpins from ipfs and marks expiredAt', async () => {
+    const created = await service.createPin({ cid: 'bafy-expire', owner: wallet, ttlSeconds: 300 });
+
+    const expired = await service.expirePin(created.requestid);
+
+    expect(expired).not.toBeNull();
+    expect(expired!.expiredAt).not.toBeNull();
+    expect(ipfsClient.pinRm).toHaveBeenCalledWith('bafy-expire');
+  });
+
+  it('expirePin does not unpin when another active pin shares the CID', async () => {
+    const sharedCid = 'bafy-shared';
+    const expiringPin = await service.createPin({ cid: sharedCid, owner: wallet, ttlSeconds: 300 });
+    await service.createPin({ cid: sharedCid, owner: otherWallet });
+
+    ipfsClient.pinRm.mockClear();
+
+    const expired = await service.expirePin(expiringPin.requestid);
+
+    expect(expired!.expiredAt).not.toBeNull();
+    expect(ipfsClient.pinRm).not.toHaveBeenCalled();
+  });
+
+  it('getContent throws GoneError once the only pin for a CID has expired', async () => {
+    const created = await service.createPin({ cid: 'bafy-gone', owner: wallet, ttlSeconds: 300 });
+    await service.expirePin(created.requestid);
+
+    await expect(service.getContent('bafy-gone')).rejects.toMatchObject({
+      name: 'GoneError',
+      receipt: { cid: 'bafy-gone', requestid: created.requestid }
+    });
+  });
+
+  it('findPinsExpiringBefore returns due pins only', async () => {
+    const due = await service.createPin({ cid: 'bafy-due', owner: wallet, ttlSeconds: 300 });
+    await service.createPin({ cid: 'bafy-future', owner: wallet, ttlSeconds: 86400 });
+    await service.createPin({ cid: 'bafy-no-ttl', owner: wallet });
+
+    const nowSeconds = Math.floor(Date.now() / 1000);
+    const dueWindow = service.findPinsExpiringBefore(nowSeconds + 600, 10);
+    const requestIds = dueWindow.map((row) => row.requestid);
+
+    expect(requestIds).toContain(due.requestid);
+    expect(dueWindow).toHaveLength(1);
+  });
+
   it('keeps pin status pinned when a replica fails', async () => {
     replicaB.pinAdd.mockRejectedValueOnce(new Error('replica outage'));
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { NotFoundError, PayloadTooLargeError } from '../lib/errors';
+import { GoneError, NotFoundError, PayloadTooLargeError, ValidationError } from '../lib/errors';
 import type { PinStatusResponse, PinStatusValue, StoredPinRecord } from '../types';
 import type { PinListFilters, PinRepository } from '../repositories/pin-repository';
 import { resolveContentType } from './content-type';
@@ -7,6 +7,13 @@ import type { GatewayContentCache } from './content-cache';
 import type { IpfsClient } from './ipfs-rpc-client';
 
 const DEFAULT_GATEWAY_MAX_CONTENT_SIZE_BYTES = 50 * 1024 * 1024;
+const DEFAULT_TTL_MIN_SECONDS = 5 * 60;
+const DEFAULT_TTL_MAX_SECONDS = 30 * 24 * 60 * 60;
+
+export interface TtlBounds {
+  minSeconds: number;
+  maxSeconds: number;
+}
 
 export interface CreatePinInput {
   cid: string;
@@ -14,6 +21,7 @@ export interface CreatePinInput {
   origins?: string[];
   meta?: Record<string, string>;
   owner: string;
+  ttlSeconds?: number;
 }
 
 export interface ReplacePinInput {
@@ -21,6 +29,7 @@ export interface ReplacePinInput {
   name?: string;
   origins?: string[];
   meta?: Record<string, string>;
+  ttlSeconds?: number;
 }
 
 export interface ListPinsInput {
@@ -38,6 +47,7 @@ export interface PinningServiceOptions {
   contentCache?: GatewayContentCache;
   maxGatewayContentSizeBytes?: number;
   replicas?: PinningReplica[];
+  ttlBounds?: TtlBounds;
 }
 
 export interface GatewayContentResult {
@@ -85,6 +95,7 @@ export class PinningService {
   private readonly maxGatewayContentSizeBytes: number;
   private readonly replicas: PinningReplica[];
   private readonly delegates: string[];
+  private readonly ttlBounds: TtlBounds;
 
   constructor(
     private readonly repository: PinRepository,
@@ -95,13 +106,37 @@ export class PinningService {
     this.contentCache = options?.contentCache;
     this.maxGatewayContentSizeBytes = options?.maxGatewayContentSizeBytes ?? DEFAULT_GATEWAY_MAX_CONTENT_SIZE_BYTES;
     this.replicas = options?.replicas ?? [];
+    this.ttlBounds = options?.ttlBounds ?? {
+      minSeconds: DEFAULT_TTL_MIN_SECONDS,
+      maxSeconds: DEFAULT_TTL_MAX_SECONDS
+    };
     this.delegates = Array.from(
       new Set([this.delegateUrl, ...this.replicas.map((replica) => replica.delegateUrl).filter((url): url is string => !!url)])
     );
   }
 
+  getTtlBounds(): TtlBounds {
+    return { ...this.ttlBounds };
+  }
+
+  private validateTtlSeconds(ttlSeconds: number | undefined): number | null {
+    if (ttlSeconds === undefined) {
+      return null;
+    }
+
+    if (!Number.isInteger(ttlSeconds) || ttlSeconds < this.ttlBounds.minSeconds || ttlSeconds > this.ttlBounds.maxSeconds) {
+      throw new ValidationError(
+        `ttl_seconds must be an integer between ${this.ttlBounds.minSeconds} and ${this.ttlBounds.maxSeconds}`
+      );
+    }
+
+    return ttlSeconds;
+  }
+
   async createPin(input: CreatePinInput): Promise<StoredPinRecord> {
+    const ttlSeconds = this.validateTtlSeconds(input.ttlSeconds);
     const now = new Date().toISOString();
+    const expiresAt = ttlSeconds === null ? null : Math.floor(Date.now() / 1000) + ttlSeconds;
 
     const record: StoredPinRecord = {
       requestid: randomUUID(),
@@ -114,7 +149,9 @@ export class PinningService {
       info: {},
       owner: input.owner,
       created: now,
-      updated: now
+      updated: now,
+      expiresAt,
+      expiredAt: null
     };
 
     this.repository.create(record);
@@ -153,6 +190,12 @@ export class PinningService {
       throw new NotFoundError(`Pin request ${requestid} was not found`);
     }
 
+    if (existing.expiredAt !== null) {
+      throw new NotFoundError(`Pin request ${requestid} was not found`);
+    }
+
+    const ttlSeconds = this.validateTtlSeconds(input.ttlSeconds);
+
     if (existing.cid !== input.cid) {
       try {
         await this.ipfsClient.pinRm(existing.cid);
@@ -168,6 +211,9 @@ export class PinningService {
       this.contentCache?.delete(input.cid);
     }
 
+    const expiresAt =
+      ttlSeconds === null ? existing.expiresAt : Math.floor(Date.now() / 1000) + ttlSeconds;
+
     const next: StoredPinRecord = {
       ...existing,
       cid: input.cid,
@@ -176,7 +222,9 @@ export class PinningService {
       meta: input.meta ?? {},
       status: 'pinning',
       info: {},
-      updated: new Date().toISOString()
+      updated: new Date().toISOString(),
+      expiresAt,
+      expiredAt: null
     };
 
     this.repository.update(requestid, next);
@@ -215,10 +263,51 @@ export class PinningService {
       throw new NotFoundError(`Pin request ${requestid} was not found`);
     }
 
-    await this.ipfsClient.pinRm(existing.cid);
-    await this.unpinOnReplicas(existing.cid);
+    if (!this.repository.hasOtherActivePinForCid(existing.cid, requestid)) {
+      await this.ipfsClient.pinRm(existing.cid);
+      await this.unpinOnReplicas(existing.cid);
+      this.contentCache?.delete(existing.cid);
+    }
+
     this.repository.delete(requestid);
-    this.contentCache?.delete(existing.cid);
+  }
+
+  findPinsExpiringBefore(nowSeconds: number, limit: number): StoredPinRecord[] {
+    return this.repository.findExpiringBefore(nowSeconds, limit);
+  }
+
+  async expirePin(requestid: string): Promise<StoredPinRecord | null> {
+    const existing = this.repository.findByRequestId(requestid);
+    if (!existing) {
+      return null;
+    }
+
+    if (existing.expiredAt !== null) {
+      return existing;
+    }
+
+    if (existing.expiresAt === null) {
+      return existing;
+    }
+
+    if (!this.repository.hasOtherActivePinForCid(existing.cid, requestid)) {
+      try {
+        await this.ipfsClient.pinRm(existing.cid);
+      } catch {
+        // Best-effort: still mark expired so we don't loop on this row.
+      }
+      await this.unpinOnReplicas(existing.cid);
+      this.contentCache?.delete(existing.cid);
+    }
+
+    const expiredAt = Math.floor(Date.now() / 1000);
+    const updated: StoredPinRecord = {
+      ...existing,
+      expiredAt,
+      updated: new Date().toISOString()
+    };
+    this.repository.update(requestid, updated);
+    return updated;
   }
 
   getPin(requestid: string, owner?: string): StoredPinRecord {
@@ -333,6 +422,15 @@ export class PinningService {
   }
 
   async getContent(cid: string): Promise<GatewayContentResult> {
+    const latest = this.repository.findLatestByCid(cid);
+    if (latest && latest.expiredAt !== null && !this.repository.hasOtherActivePinForCid(cid, latest.requestid)) {
+      throw new GoneError(`Content for CID ${cid} expired at ${latest.expiredAt}`, {
+        cid,
+        requestid: latest.requestid,
+        expiredAt: latest.expiredAt
+      });
+    }
+
     const cached = this.contentCache?.get(cid);
     if (cached) {
       return {
@@ -349,7 +447,7 @@ export class PinningService {
       throw new PayloadTooLargeError(`Gateway content exceeds ${this.maxGatewayContentSizeBytes} bytes`);
     }
 
-    const pin = this.repository.findLatestByCid(cid);
+    const pin = latest;
     const filename = pin?.name ?? null;
     const meta = pin?.meta ?? {};
     const contentType = resolveContentType(content, filename, meta);
@@ -384,6 +482,8 @@ export function toPinStatusResponse(record: StoredPinRecord): PinStatusResponse 
       meta: record.meta
     },
     delegates: record.delegates,
-    info: record.info
+    info: record.info,
+    ...(record.expiresAt !== null ? { expiresAt: record.expiresAt } : {}),
+    ...(record.expiredAt !== null ? { expiredAt: record.expiredAt } : {})
   };
 }
